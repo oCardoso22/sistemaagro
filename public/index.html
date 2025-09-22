@@ -442,16 +442,7 @@
     <div id="resultsSection" class="results-section">
         <h2 class="results-title">Dados Extraídos</h2>
 
-        <div class="format-toggle">
-            <button class="format-button active" id="formatTable">Visualização Formatada</button>
-            <button class="format-button" id="formatJson">JSON</button>
-        </div>
-
-        <div id="formattedDisplay" class="formatted-display show">
-            <div id="formattedContent"></div>
-        </div>
-
-        <div id="jsonSection" style="display: none;">
+        <div id="jsonSection">
             <div class="json-header">
                 <span>📋 Dados em JSON</span>
                 <button class="copy-button" id="copyButton">Copiar JSON</button>
@@ -480,11 +471,7 @@
     const loading = document.getElementById('loading');
     const resultsSection = document.getElementById('resultsSection');
     const jsonSection = document.getElementById('jsonSection');
-    const formattedDisplay = document.getElementById('formattedDisplay');
     const jsonContent = document.getElementById('jsonContent');
-    const formattedContent = document.getElementById('formattedContent');
-    const formatJson = document.getElementById('formatJson');
-    const formatTable = document.getElementById('formatTable');
     const copyButton = document.getElementById('copyButton');
     const successMessage = document.getElementById('successMessage');
     const errorMessage = document.getElementById('errorMessage');
@@ -499,8 +486,7 @@
     uploadArea.addEventListener('drop', handleDrop);
     fileInput.addEventListener('change', handleFileSelect);
     extractButton.addEventListener('click', extractData);
-    formatJson.addEventListener('click', () => showFormat('json'));
-    formatTable.addEventListener('click', () => showFormat('table'));
+
     copyButton.addEventListener('click', copyJsonToClipboard);
 
     function handleDragOver(e) {
@@ -572,7 +558,6 @@
 
     function displayResults(result) {
         jsonContent.textContent = JSON.stringify(result.data, null, 2);
-        displayFormattedData(result.data);
 
         if (result.metadata) {
             metadata.innerHTML = `
@@ -587,104 +572,7 @@
         resultsSection.classList.add('show');
     }
 
-    function displayFormattedData(data) {
-        const formatValue = (value) => {
-            if (value === null || value === undefined) {
-                return '<span class="data-value null">Não informado</span>';
-            }
-            if (typeof value === 'string' && value.trim() === '') {
-                return '<span class="data-value null">Vazio</span>';
-            }
-            return `<span class="data-value">${value}</span>`;
-        };
 
-        const formatCurrency = (value) => {
-            if (value && !isNaN(value)) {
-                return `<span class="data-value">R$ ${parseFloat(value).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>`;
-            }
-            return formatValue(value);
-        };
-
-        formattedContent.innerHTML = `
-                <div class="data-group">
-                    <h3>👤 Fornecedor</h3>
-                    <div class="data-item">
-                        <span class="data-label">Razão Social:</span>
-                        ${formatValue(data.fornecedor?.razao_social)}
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Nome Fantasia:</span>
-                        ${formatValue(data.fornecedor?.fantasia)}
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">CNPJ:</span>
-                        ${formatValue(data.fornecedor?.cnpj)}
-                    </div>
-                </div>
-
-                <div class="data-group">
-                    <h3>🏢 Faturado</h3>
-                    <div class="data-item">
-                        <span class="data-label">Nome Completo:</span>
-                        ${formatValue(data.faturado?.nome_completo)}
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">CPF:</span>
-                        ${formatValue(data.faturado?.cpf)}
-                    </div>
-                </div>
-
-                <div class="data-group">
-                    <h3>📄 Dados da Nota Fiscal</h3>
-                    <div class="data-item">
-                        <span class="data-label">Número:</span>
-                        ${formatValue(data.numero_nota_fiscal)}
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Data de Emissão:</span>
-                        ${formatValue(data.data_emissao)}
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Data de Vencimento:</span>
-                        ${formatValue(data.data_vencimento)}
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Valor Total:</span>
-                        ${formatCurrency(data.valor_total)}
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Parcelas:</span>
-                        ${formatValue(data.quantidade_parcelas)}
-                    </div>
-                </div>
-
-                <div class="data-group">
-                    <h3>📦 Produtos/Serviços</h3>
-                    <div class="data-item">
-                        <span class="data-label">Descrição:</span>
-                        ${formatValue(data.descricao_produtos)}
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Classificação:</span>
-                        ${formatValue(data.classificacao_despesa)}
-                    </div>
-                </div>
-            `;
-    }
-
-    function showFormat(format) {
-        if (format === 'json') {
-            jsonSection.style.display = 'block';
-            formattedDisplay.classList.remove('show');
-            formatJson.classList.add('active');
-            formatTable.classList.remove('active');
-        } else {
-            jsonSection.style.display = 'none';
-            formattedDisplay.classList.add('show');
-            formatTable.classList.add('active');
-            formatJson.classList.remove('active');
-        }
-    }
 
     function copyJsonToClipboard() {
         if (!currentData) return;

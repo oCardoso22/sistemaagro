@@ -1,15 +1,10 @@
 const express = require('express');
 const multer = require('multer');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const Tesseract = require('tesseract.js');
-const pdfjsLib = require('pdfjs-dist/legacy/build/pdf');
 require('dotenv').config();
 
 const app = express();
 const port = 3000;
-
-// Configuração do PDF.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.js');
 
 // Configuração do Multer para upload de PDFs
 const storage = multer.memoryStorage();
@@ -47,65 +42,33 @@ const CATEGORIAS_DESPESAS = [
     'INVESTIMENTOS'
 ];
 
-// Função para extrair texto do PDF usando PDF.js
-async function extractTextFromPDF(pdfBuffer) {
+// Função para processar PDF diretamente com Gemini
+async function processPDFWithGemini(pdfBuffer) {
     try {
-        console.log('📄 Extraindo texto do PDF...');
-        const startTime = Date.now();
-
-        const loadingTask = pdfjsLib.getDocument({
-            data: new Uint8Array(pdfBuffer),
-            verbosity: 0
-        });
-
-        const pdf = await loadingTask.promise;
-        console.log(`📊 PDF carregado. Páginas: ${pdf.numPages}`);
-
-        let fullText = '';
-
-        // Extrai texto de todas as páginas
-        for (let pageNum = 1; pageNum <= Math.min(pdf.numPages, 3); pageNum++) {
-            const page = await pdf.getPage(pageNum);
-            const textContent = await page.getTextContent();
-
-            const pageText = textContent.items
-                .map(item => item.str)
-                .join(' ');
-
-            fullText += pageText + '\n\n';
-            console.log(`📝 Página ${pageNum} processada: ${pageText.length} caracteres`);
-        }
-
-        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`✅ Texto extraído em ${duration}s. Total: ${fullText.length} caracteres`);
-
-        return fullText.trim();
-    } catch (error) {
-        console.error('❌ Erro na extração de texto do PDF:', error);
-        throw new Error(`Falha na extração de texto do PDF: ${error.message}`);
-    }
-}
-
-// Função para processar dados com Gemini
-async function processWithGemini(extractedText, method = 'text') {
-    try {
-        console.log(`🤖 Processando com Gemini (método: ${method})...`);
+        console.log('🤖 Processando PDF diretamente com Gemini...');
 
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-        const prompt = `Você é um especialista em análise de notas fiscais brasileiras. Analise o texto abaixo extraído de uma nota fiscal e extraia EXATAMENTE os seguintes dados em formato JSON válido.
+        const prompt = `Você é um especialista em análise de notas fiscais brasileiras (NFe). Analise este documento PDF de uma nota fiscal e extraia EXATAMENTE os seguintes dados em formato JSON válido.
 
-TEXTO DA NOTA FISCAL:
-${extractedText}
-
-INSTRUÇÕES IMPORTANTES:
+INSTRUÇÕES CRÍTICAS:
 - Use 'null' se a informação não for encontrada
 - Para datas, use formato YYYY-MM-DD
 - Para valores monetários, use apenas números (sem R$, pontos ou vírgulas)
 - Para CNPJ/CPF, mantenha apenas números
 - Para classificação de despesa, analise os produtos/serviços e escolha UMA categoria mais adequada
-- Se não conseguir identificar uma data específica, use 'null'
-- Para parcelas, se não especificado, considere 1 parcela
+
+ATENÇÃO ESPECIAL - NÃO CONFUNDA ESTES CAMPOS:
+- NÚMERO DA NOTA FISCAL: Aparece como "NF-e N°:" ou "N°:" seguido de números (exemplo: "000.207.590")
+- CNPJ DO FORNECEDOR: Formato XX.XXX.XXX/XXXX-XX (exemplo: "18.944.113/0002-91") - geralmente na seção do emitente/fornecedor
+- CNPJ/CPF DO DESTINATÁRIO: Na seção "DESTINATÁRIO/REMETENTE"
+
+ESTRUTURA TÍPICA DE UMA NFe:
+1. CABEÇALHO: Contém o número da NFe (N°:)
+2. EMITENTE/FORNECEDOR: Razão social, CNPJ do fornecedor
+3. DESTINATÁRIO: Nome e CNPJ/CPF de quem recebe
+4. PRODUTOS/SERVIÇOS: Descrição e valores
+5. TOTAIS: Valor total da nota
 
 CATEGORIAS DE DESPESAS DISPONÍVEIS:
 ${CATEGORIAS_DESPESAS.map((cat, index) => `${index + 1}. ${cat}`).join('\n')}
@@ -113,26 +76,42 @@ ${CATEGORIAS_DESPESAS.map((cat, index) => `${index + 1}. ${cat}`).join('\n')}
 FORMATO DE RESPOSTA (JSON):
 {
     "fornecedor": {
-        "razao_social": "string ou null",
-        "fantasia": "string ou null", 
-        "cnpj": "apenas números ou null"
+        "razao_social": "string ou null (nome da empresa emitente)",
+        "fantasia": "string ou null (nome fantasia se houver)", 
+        "cnpj": "apenas números ou null (CNPJ da empresa EMITENTE/FORNECEDORA)"
     },
     "faturado": {
-        "nome_completo": "string ou null",
-        "cpf": "apenas números ou null"
+        "nome_completo": "string ou null (nome do DESTINATÁRIO)",
+        "cpf": "apenas números ou null (CPF/CNPJ do DESTINATÁRIO)"
     },
-    "numero_nota_fiscal": "string ou null",
+    "numero_nota_fiscal": "string ou null (número que aparece após 'N°:' ou 'NF-e N°:')",
     "data_emissao": "YYYY-MM-DD ou null",
     "descricao_produtos": "descrição detalhada dos produtos/serviços ou null",
     "quantidade_parcelas": 1,
     "data_vencimento": "YYYY-MM-DD ou null", 
-    "valor_total": "número ou null",
+    "valor_total": "número ou null (valor em centavos, ex: 344900 para R$ 3.449,00)",
     "classificacao_despesa": "uma das categorias acima ou null"
 }
 
+EXEMPLOS PARA EVITAR CONFUSÃO:
+- Se vir "N°: 000.207.590", então numero_nota_fiscal = "000207590"
+- Se vir CNPJ "18.944.113/0002-91" na seção do emitente, então fornecedor.cnpj = "18944113000291"
+- Se vir CPF "709.046.011-88" na seção destinatário, então faturado.cpf = "70904601188"
+
 RESPOSTA: Retorne APENAS o JSON válido, sem comentários, explicações ou formatação markdown.`;
 
-        const result = await model.generateContent(prompt);
+        // Converte o buffer do PDF para base64
+        const pdfBase64 = pdfBuffer.toString('base64');
+
+        // Cria o objeto de arquivo para o Gemini
+        const filePart = {
+            inlineData: {
+                data: pdfBase64,
+                mimeType: 'application/pdf'
+            }
+        };
+
+        const result = await model.generateContent([prompt, filePart]);
         const response = await result.response;
         let text = response.text().replace(/```json|```/g, '').trim();
 
@@ -177,32 +156,21 @@ app.post('/extract-data', upload.single('invoice'), async (req, res) => {
         console.log(`📁 Arquivo: ${req.file.originalname}`);
         console.log(`📊 Tamanho: ${(req.file.size / 1024).toFixed(1)}KB`);
 
-        // Extrai texto do PDF
-        const extractedText = await extractTextFromPDF(req.file.buffer);
-
-        if (!extractedText || extractedText.length < 50) {
-            throw new Error('Texto extraído do PDF é muito curto ou vazio. Verifique se o PDF não está corrompido.');
-        }
-
-        // Processa com Gemini
-        const extractedData = await processWithGemini(extractedText);
+        // Processa PDF diretamente com Gemini
+        const extractedData = await processPDFWithGemini(req.file.buffer);
 
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
         console.log(`🎉 Processamento concluído em ${totalTime}s`);
 
         res.json({
             success: true,
-            method: 'pdf_text_extraction',
+            method: 'direct_pdf_processing',
             data: extractedData,
             metadata: {
                 filename: req.file.originalname,
                 fileSize: req.file.size,
-                textLength: extractedText.length,
                 processingTime: `${totalTime}s`,
                 timestamp: new Date().toISOString()
-            },
-            debug: {
-                textPreview: extractedText.substring(0, 300) + '...'
             }
         });
 
@@ -227,6 +195,7 @@ app.get('/test', (req, res) => {
         gemini_key_configured: !!process.env.GEMINI_API_KEY,
         supported_formats: ['PDF'],
         categories: CATEGORIAS_DESPESAS,
+        processing_method: 'Direct PDF to Gemini',
         timestamp: new Date().toISOString()
     });
 });
@@ -285,7 +254,7 @@ app.listen(port, () => {
     console.log('='.repeat(60));
     console.log(`🌐 Servidor: http://localhost:${port}`);
     console.log(`🔑 API Gemini: ${process.env.GEMINI_API_KEY ? '✅ Configurada' : '❌ Não configurada'}`);
-    console.log(`📄 Formatos: PDF`);
+    console.log(`📄 Método: Processamento direto de PDF`);
     console.log(`📊 Categorias: ${CATEGORIAS_DESPESAS.length} disponíveis`);
     console.log('='.repeat(60));
 
