@@ -54,7 +54,7 @@ async function processPDFWithGemini(pdfBuffer) {
 INSTRUÇÕES CRÍTICAS:
 - Use 'null' se a informação não for encontrada
 - Para datas, use formato YYYY-MM-DD
-- Para valores monetários, use apenas números (sem R$, pontos ou vírgulas)
+- Para valores monetários, use apenas números (sem R$ e vírgulas, use somente ponto para separador para casas decimais)
 - Para CNPJ/CPF, mantenha apenas números
 - Para classificação de despesa, analise os produtos/serviços e escolha UMA categoria mais adequada
 
