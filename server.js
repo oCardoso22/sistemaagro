@@ -6,6 +6,9 @@ require('dotenv').config();
 const app = express();
 const port = 3000;
 
+// O nome do modelo foi atualizado para uma versão estável e robusta.
+const MODELO_GEMINI = "gemini-2.5-pro";
+
 // Configuração do Multer para upload de PDFs
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -45,9 +48,10 @@ const CATEGORIAS_DESPESAS = [
 // Função para processar PDF diretamente com Gemini
 async function processPDFWithGemini(pdfBuffer) {
     try {
-        console.log('🤖 Processando PDF diretamente com Gemini...');
+        console.log(`🤖 Processando PDF diretamente com Gemini (${MODELO_GEMINI})...`);
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // AQUI ESTÁ A CORREÇÃO: Usando a constante com o nome do modelo atualizado.
+        const model = genAI.getGenerativeModel({ model: MODELO_GEMINI });
 
         const prompt = `Você é um especialista em análise de notas fiscais brasileiras (NFe). Analise este documento PDF de uma nota fiscal e extraia EXATAMENTE os seguintes dados em formato JSON válido.
 
@@ -127,6 +131,7 @@ RESPOSTA: Retorne APENAS o JSON válido, sem comentários, explicações ou form
         return extractedData;
     } catch (error) {
         console.error('❌ Erro no processamento Gemini:', error);
+        // Garante que a mensagem de erro seja clara no log geral
         throw new Error(`Falha no processamento IA: ${error.message}`);
     }
 }
@@ -200,6 +205,26 @@ app.get('/test', (req, res) => {
     });
 });
 
+// Rota para testar modelos disponíveis
+app.get('/test-models', async (req, res) => {
+    try {
+        // CORREÇÃO AQUI
+        const model = genAI.getGenerativeModel({ model: MODELO_GEMINI });
+        const result = await model.generateContent("Diga olá");
+        const response = await result.response;
+        res.json({
+            success: true,
+            text: response.text(),
+            model: MODELO_GEMINI
+        });
+    } catch (error) {
+        res.json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 // Rota para listar categorias de despesas
 app.get('/categories', (req, res) => {
     res.json({
@@ -255,7 +280,9 @@ app.listen(port, () => {
     console.log(`🌐 Servidor: http://localhost:${port}`);
     console.log(`🔑 API Gemini: ${process.env.GEMINI_API_KEY ? '✅ Configurada' : '❌ Não configurada'}`);
     console.log(`📄 Método: Processamento direto de PDF`);
+    // CORREÇÃO AQUI
     console.log(`📊 Categorias: ${CATEGORIAS_DESPESAS.length} disponíveis`);
+    console.log(`🤖 Modelo: ${MODELO_GEMINI}`);
     console.log('='.repeat(60));
 
     if (!process.env.GEMINI_API_KEY) {
